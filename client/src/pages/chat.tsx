@@ -10,6 +10,8 @@ import { Suggestions } from "@/components/chat/suggestions";
 import { LearningProgress } from "@/components/chat/learning-progress";
 import { SearchFilter } from "@/components/chat/search-filter";
 import { SettingsPanel } from "@/components/chat/settings-panel";
+import { ApiKeySetup } from "@/components/auth/api-key-setup";
+import { useApiKey } from "@/hooks/use-api-key";
 import { useToast } from "@/hooks/use-toast";
 import type { Conversation, Message } from "@shared/schema";
 
@@ -21,8 +23,10 @@ export default function Chat() {
   const [currentModel, setCurrentModel] = useState("gemini");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState({});
+  const [showApiKeySetup, setShowApiKeySetup] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { apiKey, hasApiKey, saveApiKey, clearApiKey } = useApiKey();
 
   // Fetch conversations
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
@@ -82,10 +86,12 @@ export default function Chat() {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!selectedConversationId) throw new Error("No conversation selected");
+      if (!apiKey) throw new Error("API key required");
       const response = await apiRequest("POST", `/api/conversations/${selectedConversationId}/messages`, { 
         content,
         mode: currentMode,
-        model: currentModel
+        model: currentModel,
+        apiKey
       });
       return response.json();
     },
@@ -246,8 +252,31 @@ export default function Chat() {
     }
   }, [conversations, selectedConversationId]);
 
+  // Check if API key is needed
+  useEffect(() => {
+    if (!hasApiKey) {
+      setShowApiKeySetup(true);
+    }
+  }, [hasApiKey]);
+
+  const handleApiKeySet = (newApiKey: string) => {
+    saveApiKey(newApiKey);
+    setShowApiKeySetup(false);
+    toast({
+      title: "API Key Set",
+      description: "Your Gemini API key has been saved successfully.",
+    });
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* API Key Setup Dialog */}
+      <ApiKeySetup
+        isOpen={showApiKeySetup}
+        onApiKeySet={handleApiKeySet}
+        onClose={() => setShowApiKeySetup(false)}
+      />
+
       {/* Enhanced Sidebar */}
       <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-50 w-80 bg-background border-r transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
         <div className="flex flex-col h-full">

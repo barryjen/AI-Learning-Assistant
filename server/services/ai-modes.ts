@@ -2,7 +2,10 @@ import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import type { LearningContext } from "@shared/schema";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+// Create AI instance with user's API key
+function createGeminiClient(apiKey: string) {
+  return new GoogleGenAI({ apiKey });
+}
 
 export interface ModeResponse {
   content: string;
@@ -13,7 +16,8 @@ export interface ModeResponse {
 
 export async function generateTutorResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  apiKey?: string
 ): Promise<ModeResponse> {
   const systemPrompt = `You are an expert tutor. Your role is to:
   - Break down complex topics into digestible steps
@@ -54,7 +58,8 @@ export async function generateTutorResponse(
 
 export async function generateCreativeResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  apiKey?: string
 ): Promise<ModeResponse> {
   const systemPrompt = `You are a creative assistant focused on:
   - Brainstorming and idea generation
@@ -92,7 +97,8 @@ export async function generateCreativeResponse(
 
 export async function generateCodeResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  apiKey?: string
 ): Promise<ModeResponse> {
   const systemPrompt = `You are a programming expert assistant. Focus on:
   - Clear, well-commented code examples
@@ -134,7 +140,8 @@ export async function generateCodeResponse(
 
 export async function generateResearchResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  apiKey?: string
 ): Promise<ModeResponse> {
   const systemPrompt = `You are a research assistant focused on:
   - In-depth analysis of topics

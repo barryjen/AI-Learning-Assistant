@@ -2,7 +2,10 @@ import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import type { LearningContext } from "@shared/schema";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+// Create AI instance with user's API key
+function createGeminiClient(apiKey: string) {
+  return new GoogleGenAI({ apiKey });
+}
 
 export interface GeminiResponse {
   content: string;
@@ -11,9 +14,16 @@ export interface GeminiResponse {
 
 export async function generateResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  apiKey?: string
 ): Promise<GeminiResponse> {
   try {
+    if (!apiKey) {
+      throw new Error("API key is required");
+    }
+
+    const ai = createGeminiClient(apiKey);
+    
     // Get learning context to improve responses
     const learningContext = await storage.getLearningContext();
     
@@ -40,6 +50,9 @@ export async function generateResponse(
     };
   } catch (error) {
     console.error("Gemini API Error:", error);
+    if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("API key")) {
+      throw new Error("Invalid API key. Please check your Gemini API key and try again.");
+    }
     throw new Error("Failed to generate response");
   }
 }

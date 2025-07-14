@@ -54,10 +54,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:id/messages", async (req, res) => {
     try {
       const conversationId = parseInt(req.params.id);
-      const { content, mode = "general", model = "gemini" } = req.body;
+      const { content, mode = "general", model = "gemini", apiKey } = req.body;
       
       if (!content || typeof content !== "string") {
         return res.status(400).json({ error: "Message content is required" });
+      }
+
+      if (!apiKey) {
+        return res.status(400).json({ error: "API key is required" });
       }
 
       // Store user message
@@ -79,19 +83,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let aiResponse;
       switch (mode) {
         case "tutor":
-          aiResponse = await generateTutorResponse(content, conversationHistory);
+          aiResponse = await generateTutorResponse(content, conversationHistory, apiKey);
           break;
         case "creative":
-          aiResponse = await generateCreativeResponse(content, conversationHistory);
+          aiResponse = await generateCreativeResponse(content, conversationHistory, apiKey);
           break;
         case "code":
-          aiResponse = await generateCodeResponse(content, conversationHistory);
+          aiResponse = await generateCodeResponse(content, conversationHistory, apiKey);
           break;
         case "research":
-          aiResponse = await generateResearchResponse(content, conversationHistory);
+          aiResponse = await generateResearchResponse(content, conversationHistory, apiKey);
           break;
         default:
-          aiResponse = await generateResponse(content, conversationHistory);
+          aiResponse = await generateResponse(content, conversationHistory, apiKey);
       }
       
       // Store AI response
@@ -118,9 +122,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         suggestions,
         mode
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in message endpoint:", error);
-      res.status(500).json({ error: "Failed to process message" });
+      res.status(500).json({ error: error.message || "Failed to process message" });
+    }
+  });
+
+  // Test API key endpoint
+  app.post("/api/test-api-key", async (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "API key is required" });
+      }
+
+      // Test the API key with a simple request
+      const response = await generateResponse("Hello", [], apiKey);
+      
+      res.json({ valid: true, message: "API key is valid" });
+    } catch (error: any) {
+      console.error("API key test error:", error);
+      res.status(400).json({ error: error.message || "Invalid API key" });
     }
   });
 
