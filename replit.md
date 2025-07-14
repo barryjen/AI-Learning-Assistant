@@ -24,13 +24,14 @@ Preferred communication style: Simple, everyday language.
 - **API Design**: RESTful API with JSON responses
 - **AI Integration**: Google Gemini API for natural language processing
 - **Database**: PostgreSQL with Drizzle ORM
-- **Session Management**: Memory-based storage with fallback to PostgreSQL
+- **Session Management**: PostgreSQL database storage (switched from memory storage)
 
 ### Data Storage
-- **Database**: PostgreSQL (configured via Drizzle)
+- **Database**: PostgreSQL (configured via Drizzle) - **ACTIVE**
 - **ORM**: Drizzle ORM with migrations support
 - **Schema**: Structured tables for users, conversations, messages, feedback, and learning context
-- **Storage Interface**: Abstracted storage layer supporting both memory and database implementations
+- **Storage Interface**: Abstracted storage layer with DatabaseStorage now active (replaced MemStorage)
+- **Database Connection**: Neon serverless PostgreSQL via @neondatabase/serverless
 
 ## Key Components
 
