@@ -3,9 +3,17 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateResponse, processUserFeedback } from "./services/gemini";
 import { 
+  generateTutorResponse, 
+  generateCreativeResponse, 
+  generateCodeResponse, 
+  generateResearchResponse,
+  generateSuggestions 
+} from "./services/ai-modes";
+import { 
   insertConversationSchema, 
   insertMessageSchema, 
-  insertFeedbackSchema 
+  insertFeedbackSchema,
+  insertUserPreferencesSchema
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -46,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:id/messages", async (req, res) => {
     try {
       const conversationId = parseInt(req.params.id);
-      const { content } = req.body;
+      const { content, mode = "general", model = "gemini" } = req.body;
       
       if (!content || typeof content !== "string") {
         return res.status(400).json({ error: "Message content is required" });
@@ -56,7 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userMessage = await storage.createMessage({
         conversationId,
         content,
-        role: "user"
+        role: "user",
+        model
       });
 
       // Get conversation history for context
@@ -66,25 +75,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: msg.content
       }));
 
-      // Generate AI response
-      const aiResponse = await generateResponse(content, conversationHistory);
+      // Generate AI response based on mode
+      let aiResponse;
+      switch (mode) {
+        case "tutor":
+          aiResponse = await generateTutorResponse(content, conversationHistory);
+          break;
+        case "creative":
+          aiResponse = await generateCreativeResponse(content, conversationHistory);
+          break;
+        case "code":
+          aiResponse = await generateCodeResponse(content, conversationHistory);
+          break;
+        case "research":
+          aiResponse = await generateResearchResponse(content, conversationHistory);
+          break;
+        default:
+          aiResponse = await generateResponse(content, conversationHistory);
+      }
       
       // Store AI response
       const aiMessage = await storage.createMessage({
         conversationId,
         content: aiResponse.content,
-        role: "assistant"
+        role: "assistant",
+        model
       });
 
-      // Update conversation timestamp
+      // Update conversation with mode and timestamp
       await storage.updateConversation(conversationId, {
+        mode,
         updatedAt: new Date()
       });
+
+      // Generate suggestions for next questions
+      const suggestions = await generateSuggestions(conversationId, content, mode);
 
       res.json({
         userMessage,
         aiMessage,
-        confidence: aiResponse.confidence
+        confidence: aiResponse.confidence,
+        suggestions,
+        mode
       });
     } catch (error) {
       console.error("Error in message endpoint:", error);
@@ -129,12 +161,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
         positiveRating: context?.averageRating || 0,
         totalFeedback: context?.totalFeedback || 0,
         topicKeywords: context?.topicKeywords || [],
+        preferredModes: context?.preferredModes || [],
+        learningStyle: context?.learningStyle || "balanced",
         isLearning: false // Will be set by frontend during API calls
       };
       
       res.json(stats);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch learning stats" });
+    }
+  });
+
+  // User preferences endpoints
+  app.get("/api/preferences", async (req, res) => {
+    try {
+      const preferences = await storage.getUserPreferences();
+      res.json(preferences || {
+        theme: "light",
+        defaultModel: "gemini",
+        voiceEnabled: false,
+        autoSuggestions: true
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  app.post("/api/preferences", async (req, res) => {
+    try {
+      const existing = await storage.getUserPreferences();
+      let preferences;
+      
+      if (existing) {
+        preferences = await storage.updateUserPreferences(req.body);
+      } else {
+        preferences = await storage.createUserPreferences(req.body);
+      }
+      
+      res.json(preferences);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update preferences" });
+    }
+  });
+
+  // Suggestions endpoints
+  app.get("/api/conversations/:id/suggestions", async (req, res) => {
+    try {
+      const conversationId = parseInt(req.params.id);
+      const suggestions = await storage.getSuggestionsByConversation(conversationId);
+      res.json(suggestions.filter(s => !s.used));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
+  app.post("/api/suggestions/:id/use", async (req, res) => {
+    try {
+      const suggestionId = parseInt(req.params.id);
+      await storage.markSuggestionUsed(suggestionId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark suggestion as used" });
+    }
+  });
+
+  // Analytics endpoints
+  app.get("/api/analytics", async (req, res) => {
+    try {
+      const analytics = await storage.getAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Search conversations
+  app.get("/api/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== "string") {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+      
+      const conversations = await storage.getConversations();
+      const searchResults = conversations.filter(conv => 
+        conv.title.toLowerCase().includes(q.toLowerCase()) ||
+        conv.summary?.toLowerCase().includes(q.toLowerCase())
+      );
+      
+      res.json(searchResults);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search conversations" });
+    }
+  });
+
+  // Export conversation
+  app.get("/api/conversations/:id/export", async (req, res) => {
+    try {
+      const conversationId = parseInt(req.params.id);
+      const conversation = await storage.getConversation(conversationId);
+      const messages = await storage.getMessagesByConversation(conversationId);
+      
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      
+      const exportData = {
+        conversation,
+        messages,
+        exportedAt: new Date().toISOString()
+      };
+      
+      res.json(exportData);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to export conversation" });
     }
   });
 

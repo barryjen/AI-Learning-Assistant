@@ -4,6 +4,9 @@ import {
   messages, 
   feedback, 
   learningContext,
+  userPreferences,
+  suggestions,
+  analytics,
   type User, 
   type InsertUser,
   type Conversation,
@@ -13,7 +16,13 @@ import {
   type Feedback,
   type InsertFeedback,
   type LearningContext,
-  type InsertLearningContext
+  type InsertLearningContext,
+  type UserPreferences,
+  type InsertUserPreferences,
+  type Suggestion,
+  type InsertSuggestion,
+  type Analytics,
+  type InsertAnalytics
 } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -42,6 +51,21 @@ export interface IStorage {
   getLearningContext(): Promise<LearningContext | undefined>;
   createLearningContext(context: InsertLearningContext): Promise<LearningContext>;
   updateLearningContext(updates: Partial<LearningContext>): Promise<LearningContext | undefined>;
+  
+  // User Preferences
+  getUserPreferences(userId?: number): Promise<UserPreferences | undefined>;
+  createUserPreferences(preferences: InsertUserPreferences): Promise<UserPreferences>;
+  updateUserPreferences(updates: Partial<UserPreferences>): Promise<UserPreferences | undefined>;
+  
+  // Suggestions
+  getSuggestionsByConversation(conversationId: number): Promise<Suggestion[]>;
+  createSuggestion(suggestion: InsertSuggestion): Promise<Suggestion>;
+  markSuggestionUsed(id: number): Promise<void>;
+  
+  // Analytics
+  getAnalytics(): Promise<Analytics[]>;
+  createAnalytics(analytics: InsertAnalytics): Promise<Analytics>;
+  updateAnalytics(updates: Partial<Analytics>): Promise<Analytics | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -82,7 +106,12 @@ export class DatabaseStorage implements IStorage {
   async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
     const [conversation] = await db
       .insert(conversations)
-      .values(insertConversation)
+      .values({
+        ...insertConversation,
+        mode: insertConversation.mode || null,
+        tags: insertConversation.tags || null,
+        summary: insertConversation.summary || null
+      })
       .returning();
     return conversation;
   }
@@ -116,7 +145,12 @@ export class DatabaseStorage implements IStorage {
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(messages)
-      .values(insertMessage)
+      .values({
+        ...insertMessage,
+        model: insertMessage.model || null,
+        attachments: insertMessage.attachments || null,
+        codeBlocks: insertMessage.codeBlocks || null
+      })
       .returning();
     return message;
   }
@@ -148,7 +182,16 @@ export class DatabaseStorage implements IStorage {
   async createLearningContext(insertContext: InsertLearningContext): Promise<LearningContext> {
     const [context] = await db
       .insert(learningContext)
-      .values(insertContext)
+      .values({
+        ...insertContext,
+        topicKeywords: insertContext.topicKeywords || null,
+        positivePatterns: insertContext.positivePatterns || null,
+        negativePatterns: insertContext.negativePatterns || null,
+        averageRating: insertContext.averageRating || null,
+        totalFeedback: insertContext.totalFeedback || null,
+        preferredModes: insertContext.preferredModes || null,
+        learningStyle: insertContext.learningStyle || null
+      })
       .returning();
     return context;
   }
@@ -164,6 +207,95 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return context || undefined;
   }
+
+  // User Preferences
+  async getUserPreferences(userId: number = 1): Promise<UserPreferences | undefined> {
+    const [preferences] = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId))
+      .limit(1);
+    return preferences || undefined;
+  }
+
+  async createUserPreferences(insertPreferences: InsertUserPreferences): Promise<UserPreferences> {
+    const [preferences] = await db
+      .insert(userPreferences)
+      .values(insertPreferences)
+      .returning();
+    return preferences;
+  }
+
+  async updateUserPreferences(updates: Partial<UserPreferences>): Promise<UserPreferences | undefined> {
+    const existing = await this.getUserPreferences(updates.userId || 1);
+    if (!existing) return undefined;
+    
+    const [preferences] = await db
+      .update(userPreferences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userPreferences.id, existing.id))
+      .returning();
+    return preferences || undefined;
+  }
+
+  // Suggestions
+  async getSuggestionsByConversation(conversationId: number): Promise<Suggestion[]> {
+    const result = await db
+      .select()
+      .from(suggestions)
+      .where(eq(suggestions.conversationId, conversationId))
+      .orderBy(suggestions.priority, suggestions.createdAt);
+    return result;
+  }
+
+  async createSuggestion(insertSuggestion: InsertSuggestion): Promise<Suggestion> {
+    const [suggestion] = await db
+      .insert(suggestions)
+      .values(insertSuggestion)
+      .returning();
+    return suggestion;
+  }
+
+  async markSuggestionUsed(id: number): Promise<void> {
+    await db
+      .update(suggestions)
+      .set({ used: true })
+      .where(eq(suggestions.id, id));
+  }
+
+  // Analytics
+  async getAnalytics(): Promise<Analytics[]> {
+    const result = await db
+      .select()
+      .from(analytics)
+      .orderBy(analytics.date);
+    return result;
+  }
+
+  async createAnalytics(insertAnalytics: InsertAnalytics): Promise<Analytics> {
+    const [analyticsRecord] = await db
+      .insert(analytics)
+      .values(insertAnalytics)
+      .returning();
+    return analyticsRecord;
+  }
+
+  async updateAnalytics(updates: Partial<Analytics>): Promise<Analytics | undefined> {
+    const latestAnalytics = await db
+      .select()
+      .from(analytics)
+      .orderBy(analytics.date)
+      .limit(1);
+    
+    if (latestAnalytics.length === 0) return undefined;
+    
+    const [analyticsRecord] = await db
+      .update(analytics)
+      .set(updates)
+      .where(eq(analytics.id, latestAnalytics[0].id))
+      .returning();
+    return analyticsRecord || undefined;
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -172,12 +304,18 @@ export class MemStorage implements IStorage {
   private messages: Map<number, Message>;
   private feedback: Map<number, Feedback>;
   private learningContext: LearningContext | undefined;
+  private userPreferences: Map<number, UserPreferences>;
+  private suggestions: Map<number, Suggestion>;
+  private analytics: Map<number, Analytics>;
   
   private userIdCounter: number = 1;
   private conversationIdCounter: number = 1;
   private messageIdCounter: number = 1;
   private feedbackIdCounter: number = 1;
   private learningContextIdCounter: number = 1;
+  private preferencesIdCounter: number = 1;
+  private suggestionsIdCounter: number = 1;
+  private analyticsIdCounter: number = 1;
 
   constructor() {
     this.users = new Map();
@@ -185,6 +323,9 @@ export class MemStorage implements IStorage {
     this.messages = new Map();
     this.feedback = new Map();
     this.learningContext = undefined;
+    this.userPreferences = new Map();
+    this.suggestions = new Map();
+    this.analytics = new Map();
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -220,6 +361,9 @@ export class MemStorage implements IStorage {
     const conversation: Conversation = { 
       ...insertConversation, 
       id,
+      mode: insertConversation.mode || null,
+      tags: insertConversation.tags || null,
+      summary: insertConversation.summary || null,
       createdAt: now,
       updatedAt: now
     };
@@ -251,6 +395,9 @@ export class MemStorage implements IStorage {
     const message: Message = { 
       ...insertMessage, 
       id,
+      model: insertMessage.model || null,
+      attachments: insertMessage.attachments || null,
+      codeBlocks: insertMessage.codeBlocks || null,
       timestamp: new Date()
     };
     this.messages.set(id, message);
@@ -285,6 +432,8 @@ export class MemStorage implements IStorage {
       negativePatterns: insertContext.negativePatterns || null,
       averageRating: insertContext.averageRating || null,
       totalFeedback: insertContext.totalFeedback || null,
+      preferredModes: insertContext.preferredModes || null,
+      learningStyle: insertContext.learningStyle || null,
       id,
       updatedAt: new Date()
     };
@@ -297,6 +446,99 @@ export class MemStorage implements IStorage {
     
     const updated = { ...this.learningContext, ...updates, updatedAt: new Date() };
     this.learningContext = updated;
+    return updated;
+  }
+
+  // User Preferences
+  async getUserPreferences(userId: number = 1): Promise<UserPreferences | undefined> {
+    return Array.from(this.userPreferences.values()).find(p => p.userId === userId);
+  }
+
+  async createUserPreferences(insertPreferences: InsertUserPreferences): Promise<UserPreferences> {
+    const id = this.preferencesIdCounter++;
+    const preferences: UserPreferences = {
+      userId: insertPreferences.userId || null,
+      theme: insertPreferences.theme || null,
+      defaultModel: insertPreferences.defaultModel || null,
+      voiceEnabled: insertPreferences.voiceEnabled || null,
+      autoSuggestions: insertPreferences.autoSuggestions || null,
+      id,
+      updatedAt: new Date()
+    };
+    this.userPreferences.set(id, preferences);
+    return preferences;
+  }
+
+  async updateUserPreferences(updates: Partial<UserPreferences>): Promise<UserPreferences | undefined> {
+    const existing = await this.getUserPreferences(updates.userId || 1);
+    if (!existing) return undefined;
+    
+    const updated = { ...existing, ...updates, updatedAt: new Date() };
+    this.userPreferences.set(existing.id, updated);
+    return updated;
+  }
+
+  // Suggestions
+  async getSuggestionsByConversation(conversationId: number): Promise<Suggestion[]> {
+    return Array.from(this.suggestions.values())
+      .filter(s => s.conversationId === conversationId)
+      .sort((a, b) => (a.priority || 0) - (b.priority || 0));
+  }
+
+  async createSuggestion(insertSuggestion: InsertSuggestion): Promise<Suggestion> {
+    const id = this.suggestionsIdCounter++;
+    const suggestion: Suggestion = {
+      conversationId: insertSuggestion.conversationId,
+      content: insertSuggestion.content,
+      type: insertSuggestion.type,
+      priority: insertSuggestion.priority || null,
+      used: insertSuggestion.used || null,
+      id,
+      createdAt: new Date()
+    };
+    this.suggestions.set(id, suggestion);
+    return suggestion;
+  }
+
+  async markSuggestionUsed(id: number): Promise<void> {
+    const suggestion = this.suggestions.get(id);
+    if (suggestion) {
+      suggestion.used = true;
+      this.suggestions.set(id, suggestion);
+    }
+  }
+
+  // Analytics
+  async getAnalytics(): Promise<Analytics[]> {
+    return Array.from(this.analytics.values()).sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }
+
+  async createAnalytics(insertAnalytics: InsertAnalytics): Promise<Analytics> {
+    const id = this.analyticsIdCounter++;
+    const analytics: Analytics = {
+      date: insertAnalytics.date || new Date(),
+      totalMessages: insertAnalytics.totalMessages || null,
+      totalConversations: insertAnalytics.totalConversations || null,
+      averageRating: insertAnalytics.averageRating || null,
+      topicsDiscussed: insertAnalytics.topicsDiscussed || null,
+      mostUsedMode: insertAnalytics.mostUsedMode || null,
+      feedbackCount: insertAnalytics.feedbackCount || null,
+      id
+    };
+    this.analytics.set(id, analytics);
+    return analytics;
+  }
+
+  async updateAnalytics(updates: Partial<Analytics>): Promise<Analytics | undefined> {
+    const latestAnalytics = Array.from(this.analytics.values())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    
+    if (!latestAnalytics) return undefined;
+    
+    const updated = { ...latestAnalytics, ...updates };
+    this.analytics.set(latestAnalytics.id, updated);
     return updated;
   }
 }
