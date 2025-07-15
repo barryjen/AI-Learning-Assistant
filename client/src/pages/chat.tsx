@@ -26,7 +26,15 @@ export default function Chat() {
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { apiKey, hasApiKey, saveApiKey, clearApiKey } = useApiKey();
+  const { 
+    preferredProvider, 
+    hasAnyApiKey, 
+    hasApiKey, 
+    getCurrentApiKey, 
+    saveApiKey, 
+    clearApiKey,
+    setPreferredProvider 
+  } = useApiKey();
 
   // Fetch conversations
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
@@ -86,12 +94,15 @@ export default function Chat() {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!selectedConversationId) throw new Error("No conversation selected");
-      if (!apiKey) throw new Error("API key required");
+      
+      const currentApiKey = getCurrentApiKey(currentModel === "openai" || currentModel === "gpt-4o" ? "openai" : "gemini");
+      if (!currentApiKey) throw new Error("API key required");
+      
       const response = await apiRequest("POST", `/api/conversations/${selectedConversationId}/messages`, { 
         content,
         mode: currentMode,
         model: currentModel,
-        apiKey
+        apiKey: currentApiKey
       });
       return response.json();
     },
@@ -254,17 +265,17 @@ export default function Chat() {
 
   // Check if API key is needed
   useEffect(() => {
-    if (!hasApiKey) {
+    if (!hasAnyApiKey()) {
       setShowApiKeySetup(true);
     }
-  }, [hasApiKey]);
+  }, [hasAnyApiKey]);
 
-  const handleApiKeySet = (newApiKey: string) => {
-    saveApiKey(newApiKey);
+  const handleApiKeySet = (newApiKey: string, provider: string) => {
+    saveApiKey(newApiKey, provider);
     setShowApiKeySetup(false);
     toast({
       title: "API Key Set",
-      description: "Your Gemini API key has been saved successfully.",
+      description: `Your ${provider === "gemini" ? "Gemini" : "OpenAI"} API key has been saved successfully.`,
     });
   };
 
@@ -338,6 +349,11 @@ export default function Chat() {
               <ChatHeader
                 isLearning={isLearning}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                currentModel={currentModel}
+                onModelChange={setCurrentModel}
+                availableModels={["gemini", "gpt-4o"]}
+                hasGeminiKey={hasApiKey("gemini")}
+                hasOpenAIKey={hasApiKey("openai")}
               />
               <SettingsPanel
                 preferences={preferences || {

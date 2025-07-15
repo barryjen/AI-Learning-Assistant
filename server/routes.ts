@@ -9,6 +9,14 @@ import {
   generateResearchResponse,
   generateSuggestions 
 } from "./services/ai-modes";
+import { generateResponse as generateOpenAIResponse } from "./services/openai";
+import { 
+  generateTutorResponse as generateOpenAITutorResponse, 
+  generateCreativeResponse as generateOpenAICreativeResponse, 
+  generateCodeResponse as generateOpenAICodeResponse, 
+  generateResearchResponse as generateOpenAIResearchResponse,
+  generateSuggestions as generateOpenAISuggestions 
+} from "./services/openai-modes";
 import { 
   insertConversationSchema, 
   insertMessageSchema, 
@@ -79,23 +87,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: msg.content
       }));
 
-      // Generate AI response based on mode
+      // Generate AI response based on mode and model
       let aiResponse;
-      switch (mode) {
-        case "tutor":
-          aiResponse = await generateTutorResponse(content, conversationHistory, apiKey);
-          break;
-        case "creative":
-          aiResponse = await generateCreativeResponse(content, conversationHistory, apiKey);
-          break;
-        case "code":
-          aiResponse = await generateCodeResponse(content, conversationHistory, apiKey);
-          break;
-        case "research":
-          aiResponse = await generateResearchResponse(content, conversationHistory, apiKey);
-          break;
-        default:
-          aiResponse = await generateResponse(content, conversationHistory, apiKey);
+      const isOpenAI = model === "gpt-4o" || model === "openai" || model === "chatgpt";
+      
+      if (isOpenAI) {
+        switch (mode) {
+          case "tutor":
+            aiResponse = await generateOpenAITutorResponse(content, conversationHistory, apiKey);
+            break;
+          case "creative":
+            aiResponse = await generateOpenAICreativeResponse(content, conversationHistory, apiKey);
+            break;
+          case "code":
+            aiResponse = await generateOpenAICodeResponse(content, conversationHistory, apiKey);
+            break;
+          case "research":
+            aiResponse = await generateOpenAIResearchResponse(content, conversationHistory, apiKey);
+            break;
+          default:
+            aiResponse = await generateOpenAIResponse(content, conversationHistory, apiKey);
+        }
+      } else {
+        // Default to Gemini
+        switch (mode) {
+          case "tutor":
+            aiResponse = await generateTutorResponse(content, conversationHistory, apiKey);
+            break;
+          case "creative":
+            aiResponse = await generateCreativeResponse(content, conversationHistory, apiKey);
+            break;
+          case "code":
+            aiResponse = await generateCodeResponse(content, conversationHistory, apiKey);
+            break;
+          case "research":
+            aiResponse = await generateResearchResponse(content, conversationHistory, apiKey);
+            break;
+          default:
+            aiResponse = await generateResponse(content, conversationHistory, apiKey);
+        }
       }
       
       // Store AI response
@@ -131,14 +161,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test API key endpoint
   app.post("/api/test-api-key", async (req, res) => {
     try {
-      const { apiKey } = req.body;
+      const { apiKey, model = "gemini" } = req.body;
       
       if (!apiKey) {
         return res.status(400).json({ error: "API key is required" });
       }
 
-      // Test the API key with a simple request
-      const response = await generateResponse("Hello", [], apiKey);
+      // Test the API key with a simple request based on model
+      const isOpenAI = model === "gpt-4o" || model === "openai" || model === "chatgpt";
+      
+      if (isOpenAI) {
+        await generateOpenAIResponse("Hello", [], apiKey);
+      } else {
+        await generateResponse("Hello", [], apiKey);
+      }
       
       res.json({ valid: true, message: "API key is valid" });
     } catch (error: any) {

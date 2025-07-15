@@ -11,29 +11,40 @@ import {
   DialogTitle,
   DialogDescription 
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Key, ExternalLink, AlertCircle, CheckCircle } from "lucide-react";
 
 interface ApiKeySetupProps {
   isOpen: boolean;
-  onApiKeySet: (apiKey: string) => void;
+  onApiKeySet: (apiKey: string, provider: string) => void;
   onClose: () => void;
 }
 
 export function ApiKeySetup({ isOpen, onApiKeySet, onClose }: ApiKeySetupProps) {
-  const [apiKey, setApiKey] = useState("");
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [activeProvider, setActiveProvider] = useState("gemini");
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!apiKey.trim()) {
-      setError("Please enter your Gemini API key");
+    const currentApiKey = activeProvider === "gemini" ? geminiApiKey : openaiApiKey;
+    
+    if (!currentApiKey.trim()) {
+      setError(`Please enter your ${activeProvider === "gemini" ? "Gemini" : "OpenAI"} API key`);
       return;
     }
 
-    if (!apiKey.startsWith("AIza")) {
+    // Validate API key format
+    if (activeProvider === "gemini" && !currentApiKey.startsWith("AIza")) {
       setError("Invalid API key format. Gemini API keys start with 'AIza'");
+      return;
+    }
+
+    if (activeProvider === "openai" && !currentApiKey.startsWith("sk-")) {
+      setError("Invalid API key format. OpenAI API keys start with 'sk-'");
       return;
     }
 
@@ -47,12 +58,15 @@ export function ApiKeySetup({ isOpen, onApiKeySet, onClose }: ApiKeySetupProps) 
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ 
+          apiKey: currentApiKey,
+          model: activeProvider === "gemini" ? "gemini" : "openai"
+        }),
       });
 
       if (response.ok) {
-        localStorage.setItem("gemini-api-key", apiKey);
-        onApiKeySet(apiKey);
+        localStorage.setItem(`${activeProvider}-api-key`, currentApiKey);
+        onApiKeySet(currentApiKey, activeProvider);
         onClose();
       } else {
         const errorData = await response.json();
@@ -65,16 +79,18 @@ export function ApiKeySetup({ isOpen, onApiKeySet, onClose }: ApiKeySetupProps) 
     }
   };
 
+  const currentApiKey = activeProvider === "gemini" ? geminiApiKey : openaiApiKey;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            Setup Gemini API Key
+            Setup AI API Key
           </DialogTitle>
           <DialogDescription>
-            To use the AI Learning Assistant, you need to provide your own Google Gemini API key.
+            Choose your preferred AI provider and enter your API key to get started.
           </DialogDescription>
         </DialogHeader>
         
@@ -86,51 +102,96 @@ export function ApiKeySetup({ isOpen, onApiKeySet, onClose }: ApiKeySetupProps) 
             </AlertDescription>
           </Alert>
 
-          <div className="space-y-3">
-            <div>
-              <h3 className="font-medium mb-2">How to get your API key:</h3>
-              <ol className="text-sm space-y-1 list-decimal list-inside text-muted-foreground">
-                <li>Go to Google AI Studio</li>
-                <li>Sign in with your Google account</li>
-                <li>Click "Get API Key"</li>
-                <li>Copy the generated key</li>
-              </ol>
-            </div>
+          <Tabs value={activeProvider} onValueChange={setActiveProvider}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="gemini">Google Gemini</TabsTrigger>
+              <TabsTrigger value="openai">OpenAI</TabsTrigger>
+            </TabsList>
             
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={() => window.open("https://aistudio.google.com/app/apikey", "_blank")}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Get API Key from Google AI Studio
-            </Button>
-          </div>
+            <TabsContent value="gemini" className="space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-medium mb-2">How to get your Gemini API key:</h3>
+                  <ol className="text-sm space-y-1 list-decimal list-inside text-muted-foreground">
+                    <li>Go to Google AI Studio</li>
+                    <li>Sign in with your Google account</li>
+                    <li>Click "Get API Key"</li>
+                    <li>Copy the generated key</li>
+                  </ol>
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => window.open("https://aistudio.google.com/app/apikey", "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Get API Key from Google AI Studio
+                </Button>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="apiKey">Gemini API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="AIza..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                disabled={isValidating}
-              />
-            </div>
+              <div>
+                <Label htmlFor="geminiApiKey">Gemini API Key</Label>
+                <Input
+                  id="geminiApiKey"
+                  type="password"
+                  placeholder="AIza..."
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  disabled={isValidating}
+                />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="openai" className="space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-medium mb-2">How to get your OpenAI API key:</h3>
+                  <ol className="text-sm space-y-1 list-decimal list-inside text-muted-foreground">
+                    <li>Go to OpenAI Platform</li>
+                    <li>Sign in to your OpenAI account</li>
+                    <li>Navigate to API keys section</li>
+                    <li>Create a new API key</li>
+                    <li>Copy the generated key</li>
+                  </ol>
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => window.open("https://platform.openai.com/api-keys", "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Get API Key from OpenAI Platform
+                </Button>
+              </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+              <div>
+                <Label htmlFor="openaiApiKey">OpenAI API Key</Label>
+                <Input
+                  id="openaiApiKey"
+                  type="password"
+                  placeholder="sk-..."
+                  value={openaiApiKey}
+                  onChange={(e) => setOpenaiApiKey(e.target.value)}
+                  disabled={isValidating}
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
 
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isValidating || !apiKey.trim()}
+              disabled={isValidating || !currentApiKey.trim()}
             >
               {isValidating ? (
                 <>
@@ -149,7 +210,7 @@ export function ApiKeySetup({ isOpen, onApiKeySet, onClose }: ApiKeySetupProps) 
           <div className="text-xs text-muted-foreground">
             <p>
               <strong>Privacy:</strong> Your API key is only stored in your browser's local storage 
-              and is used directly to communicate with Google's servers. We never store or have access to your key.
+              and is used directly to communicate with the AI provider's servers. We never store or have access to your key.
             </p>
           </div>
         </div>

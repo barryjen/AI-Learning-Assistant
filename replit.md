@@ -43,8 +43,11 @@ Preferred communication style: Simple, everyday language.
 - **Learning Context**: AI improvement data including patterns and performance metrics
 
 ### AI Service
+- **Dual AI Provider Support**: Both Google Gemini and OpenAI integration
 - **Gemini Integration**: Google's Gemini 2.5 Flash model for response generation
-- **User API Keys**: Each user provides their own Gemini API key for security and individual usage tracking
+- **OpenAI Integration**: OpenAI's GPT-4o model for response generation
+- **User API Keys**: Each user provides their own API keys for security and individual usage tracking
+- **Model Selection**: Users can switch between Gemini and OpenAI models in the chat interface
 - **Context Management**: Conversation history and learning context integration
 - **Feedback Processing**: System for improving responses based on user feedback
 - **Adaptive Learning**: AI responses improve over time using feedback patterns
@@ -68,9 +71,11 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### AI Services
-- **Google Gemini API**: Primary AI model for natural language processing
-- **User API Key Management**: Individual users provide their own Gemini API keys for security and usage tracking
-- **API Key Validation**: Backend endpoint to test API key validity before use
+- **Google Gemini API**: Google's Gemini 2.5 Flash model for natural language processing
+- **OpenAI API**: OpenAI's GPT-4o model for advanced conversational AI
+- **User API Key Management**: Individual users provide their own API keys for both providers
+- **API Key Validation**: Backend endpoint to test API key validity before use for both providers
+- **Multi-Provider Support**: Users can switch between AI providers within the chat interface
 
 ### Database
 - **Neon Database**: PostgreSQL hosting service
@@ -96,7 +101,8 @@ Preferred communication style: Simple, everyday language.
 
 ### Environment Configuration
 - **Database**: `DATABASE_URL` for PostgreSQL connection
-- **User API Keys**: Users provide their own Gemini API keys via secure browser storage
+- **User API Keys**: Users provide their own API keys for both Gemini and OpenAI via secure browser storage
+- **AI Model Selection**: Users can switch between Gemini and OpenAI models in the interface
 - **Build Process**: Separate build commands for frontend and backend
 
 ### Key Features
