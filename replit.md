@@ -44,6 +44,7 @@ Preferred communication style: Simple, everyday language.
 
 ### AI Service
 - **Gemini Integration**: Google's Gemini 2.5 Flash model for response generation
+- **User API Keys**: Each user provides their own Gemini API key for security and individual usage tracking
 - **Context Management**: Conversation history and learning context integration
 - **Feedback Processing**: System for improving responses based on user feedback
 - **Adaptive Learning**: AI responses improve over time using feedback patterns
@@ -68,7 +69,8 @@ Preferred communication style: Simple, everyday language.
 
 ### AI Services
 - **Google Gemini API**: Primary AI model for natural language processing
-- **API Key Management**: Environment variable configuration for API access
+- **User API Key Management**: Individual users provide their own Gemini API keys for security and usage tracking
+- **API Key Validation**: Backend endpoint to test API key validity before use
 
 ### Database
 - **Neon Database**: PostgreSQL hosting service
@@ -94,7 +96,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Environment Configuration
 - **Database**: `DATABASE_URL` for PostgreSQL connection
-- **AI API**: `GEMINI_API_KEY` for Google AI access
+- **User API Keys**: Users provide their own Gemini API keys via secure browser storage
 - **Build Process**: Separate build commands for frontend and backend
 
 ### Key Features
